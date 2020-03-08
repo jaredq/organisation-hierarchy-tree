@@ -6,8 +6,8 @@ interface Employee {
   name: string;
   id: string;
   managerId: string;
-  managerIds: string[];
   manager: Employee;
+  managementLevel: number;
   subordinates: Employee[];
 }
 
@@ -17,10 +17,9 @@ const treeData: string[][] = [];
 
 let maxLevel = 0;
 
-function updateMaxLevel(managerIds: string[]): void {
-  const thisLevel = managerIds.length + 1;
-  if (thisLevel > maxLevel) {
-    maxLevel = thisLevel;
+function updateMaxLevel(managementLevel: number): void {
+  if (managementLevel > maxLevel) {
+    maxLevel = managementLevel;
   }
 }
 
@@ -42,8 +41,8 @@ function findSubordinates(managerId: string): Employee[] {
 function updateSubordinates(employee: Employee): void {
   employee.subordinates.forEach(subordinate => {
     subordinate.manager = employee;
-    subordinate.managerIds = [...employee.managerIds, subordinate.managerId];
-    updateMaxLevel(subordinate.managerIds);
+    subordinate.managementLevel = employee.managementLevel + 1;
+    updateMaxLevel(subordinate.managementLevel);
 
     updateSubordinates(subordinate);
   });
@@ -54,14 +53,14 @@ function addEmployeeToTree(employee: Employee): void {
     treeData.push([`ID:${employee.managerId}`]);
   }
   const row: Array<string> = new Array(maxLevel);
-  row[employee.managerIds.length] = employee.name;
+  row[employee.managementLevel] = employee.name || `ID:${employee.id}`;
   treeData.push(row);
   employee.subordinates.forEach(e => {
     addEmployeeToTree(e);
   });
 }
 
-fs.createReadStream('src/table.csv')
+fs.createReadStream(__dirname + '/table.csv')
   .pipe(csv())
   .on('data', row => {
     const employee: Employee = row;
@@ -73,20 +72,20 @@ fs.createReadStream('src/table.csv')
         // console.log(employee.name, manager.name);
         employee.manager = manager;
         manager.subordinates.push(employee);
-        employee.managerIds = [...manager.managerIds, employee.managerId];
+        employee.managementLevel = manager.managementLevel + 1;
       } else {
-        employee.managerIds = [employee.managerId];
+        employee.managementLevel = 1;
       }
     } else {
-      employee.managerIds = [];
+      employee.managementLevel = 0;
     }
-    updateMaxLevel(employee.managerIds);
+    updateMaxLevel(employee.managementLevel);
 
     employee.subordinates = findSubordinates(employee.id);
     updateSubordinates(employee);
   })
   .on('end', () => {
-    const headers: string[] = generateHeaders(maxLevel);
+    const headers: string[] = generateHeaders(maxLevel + 1);
 
     treeData.push(headers);
 
@@ -96,6 +95,6 @@ fs.createReadStream('src/table.csv')
         addEmployeeToTree(root);
       });
 
-    const ws = fs.createWriteStream('src/tree.csv');
+    const ws = fs.createWriteStream(__dirname + '/tree.csv');
     fastcsv.write(treeData, { headers: true }).pipe(ws);
   });
