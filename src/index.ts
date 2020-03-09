@@ -1,6 +1,7 @@
 import csv from 'csv-parser';
 import * as fastcsv from 'fast-csv';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 interface Employee {
   name: string;
@@ -11,10 +12,13 @@ interface Employee {
   subordinates: Employee[];
 }
 
-const employeeData: Employee[] = [];
+// employee list mapping to input data
+const employeeList: Employee[] = [];
 
+// hierarchy tree data for output to csv
 const treeData: string[][] = [];
 
+// max level of hierarchy tree
 let maxLevel = 0;
 
 function updateMaxLevel(managementLevel: number): void {
@@ -23,21 +27,18 @@ function updateMaxLevel(managementLevel: number): void {
   }
 }
 
-function generateHeaders(maxLevel: number): string[] {
-  const headers: string[] = [];
-  let headerSize = maxLevel;
-  while (headerSize--) headers.push(String(maxLevel - headerSize));
-  return headers;
-}
-
 function findEmployee(id: string): Employee | undefined {
-  return employeeData.find(e => e.id === id);
+  return employeeList.find(e => e.id === id);
 }
 
 function findSubordinates(managerId: string): Employee[] {
-  return employeeData.filter(e => e.managerId === managerId);
+  return employeeList.filter(e => e.managerId === managerId);
 }
 
+/**
+ * update its subordinates' manager object and management level
+ * @param employee
+ */
 function updateSubordinates(employee: Employee): void {
   employee.subordinates.forEach(subordinate => {
     subordinate.manager = employee;
@@ -48,6 +49,22 @@ function updateSubordinates(employee: Employee): void {
   });
 }
 
+/**
+ * generate column headers for CSV file using management levels, e.g. `1,2,3`
+ * @param maxLevel
+ */
+function generateHeaders(maxLevel: number): string[] {
+  const headers: string[] = [];
+  let headerIndex = 0;
+  while (headerIndex++ < maxLevel) headers.push(String(headerIndex));
+  return headers;
+}
+
+/**
+ * add the employee data to the hierarchy tree,
+ * put its name or ID:[id] in the column corresponding to the management level
+ * @param employee
+ */
 function addEmployeeToTree(employee: Employee): void {
   if (employee.managerId && !employee.manager) {
     treeData.push([`ID:${employee.managerId}`]);
@@ -55,6 +72,7 @@ function addEmployeeToTree(employee: Employee): void {
   const row: Array<string> = new Array(maxLevel);
   row[employee.managementLevel] = employee.name || `ID:${employee.id}`;
   treeData.push(row);
+
   employee.subordinates.forEach(e => {
     addEmployeeToTree(e);
   });
@@ -64,12 +82,21 @@ fs.createReadStream(__dirname + '/table.csv')
   .pipe(csv())
   .on('data', row => {
     const employee: Employee = row;
-    employeeData.push(employee);
+
+    // id is required
+    if (!employee.id) {
+      return;
+    }
+
+    // find the first employee with the same Id is existing
+    const employeeWithSameId = findEmployee(employee.id);
+
+    employeeList.push(employee);
 
     if (employee.managerId) {
+      // find the manager of this employee, and update its manager object and management level
       const manager: Employee | undefined = findEmployee(employee.managerId);
       if (manager) {
-        // console.log(employee.name, manager.name);
         employee.manager = manager;
         manager.subordinates.push(employee);
         employee.managementLevel = manager.managementLevel + 1;
@@ -81,17 +108,24 @@ fs.createReadStream(__dirname + '/table.csv')
     }
     updateMaxLevel(employee.managementLevel);
 
-    employee.subordinates = findSubordinates(employee.id);
-    updateSubordinates(employee);
+    // if same-Id employee is already existing, its subordinates will not be put under this employee node
+    // the subordinates is only put under the same-Id employee node that appears for the first time.
+    if (!employeeWithSameId) {
+      employee.subordinates = findSubordinates(employee.id);
+      updateSubordinates(employee);
+    } else {
+      employee.subordinates = [];
+    }
   })
   .on('end', () => {
+    // the column headers are management levels
     const headers: string[] = generateHeaders(maxLevel + 1);
-
     treeData.push(headers);
 
-    employeeData
+    employeeList
       .filter(e => !e.manager)
       .forEach(root => {
+        // start from the employees who doesn't have a manager
         addEmployeeToTree(root);
       });
 

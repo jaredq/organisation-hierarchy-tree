@@ -1,5 +1,8 @@
 name,id,managerId
 Alan,100,150
+Alan E,100,150
+Alan E,100,150
+Alan,100,129
 Kevin,123,220
 Jane,124,220
 Martin,220,100
@@ -23,3 +26,4 @@ Will,121,120
 Sony,122,120
 Sibada,285,280
 Bily,286,121
+Ott,,121
