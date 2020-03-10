@@ -1,7 +1,6 @@
 import csv from 'csv-parser';
 import * as fastcsv from 'fast-csv';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 
 interface Employee {
   name: string;
